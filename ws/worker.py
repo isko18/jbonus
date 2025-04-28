@@ -44,8 +44,8 @@ class WebSocketWorker(QObject):
 
     # def setup_arduino(self):
     #     try:
-    #         self.arduino = serial.Serial(port='COM3', baudrate=9600, timeout=1)
-    #         self.logger.info("✅ Arduino подключен на COM3")
+    #         self.arduino = serial.Serial(port='COM10', baudrate=9600, timeout=1)
+    #         self.logger.info("✅ Arduino подключен на COM10")
     #         threading.Thread(target=self.listen_for_cap_signal, daemon=True).start()
     #     except Exception as e:
     #         self.logger.warning(f"⚠️ Не удалось подключить Arduino: {e}")

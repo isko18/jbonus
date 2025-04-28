@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Фандомат</title>
+  <style>
+    body {
+      background: #fff;
+      color: #222;
+      font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+      margin: 0; padding: 0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 32px 0 32px;
+      background: none;
+    }
+    .logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 13px;
+      background: #A3D80D;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 2.1rem;
+      color: #fff;
+      margin-right: 8px;
+    }
+    .time-date {
+      text-align: center;
+      flex: 1;
+    }
+    .time {
+      font-size: 2.4rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+      color: #212121;
+    }
+    .date {
+      font-size: 1.15rem;
+      color: #8e8e8e;
+    }
+    .support {
+      text-align: right;
+      font-size: 1.1rem;
+      color: #212121;
+    }
+    .support strong {
+      display: block;
+      color: #A3D80D;
+      font-size: 1.3rem;
+    }
+    .main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+    .banner {
+      width: 90%;
+      height: 180px;
+      background: #f3f8e6;
+      border-radius: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 40px;
+      box-shadow: 0 2px 16px #e9eedb80;
+      color: #85a309;
+      font-size: 1.7rem;
+      font-weight: bold;
+      letter-spacing: 1px;
+    }
+    .title {
+      font-size: 1.3rem;
+      font-weight: 500;
+      text-align: center;
+      margin-bottom: 40px;
+      margin-top: 20px;
+      color: #333;
+    }
+    .qr-img {
+      margin: 18px auto 32px auto;
+      display: block;
+      width: 180px;
+      height: 180px;
+      object-fit: contain;
+    }
+    .barcode-input {
+      width: 260px;
+      padding: 14px 16px;
+      font-size: 1.1rem;
+      border: 2px solid #A3D80D;
+      border-radius: 11px;
+      margin: 18px auto;
+      outline: none;
+    }
+    .main-btn {
+      background: #A3D80D;
+      color: #fff;
+      font-size: 1.4rem;
+      font-weight: bold;
+      border: none;
+      border-radius: 18px;
+      padding: 22px 0;
+      width: 95%;
+      max-width: 390px;
+      margin: 0 auto 30px auto;
+      box-shadow: 0 2px 12px #d2e59980;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .main-btn:active {
+      background: #7fc300;
+    }
+    .info {
+      margin: 16px auto 0 auto;
+      color: #007E33;
+      font-weight: 600;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">♻️</div>
+    <div class="time-date">
+      <div class="time" id="time">16:25</div>
+      <div class="date" id="date">24 апреля 2025</div>
+    </div>
+    <div class="support">
+      Поддержка:
+      <strong>0 (700) 000 000</strong>
+    </div>
+  </div>
+  <div class="main">
+    <div class="banner" id="banner">Баннер/реклама</div>
+    <div class="title" id="title">
+      Нажмите «Начать приём», чтобы сдать вторсырьё
+    </div>
+    <img src="" class="qr-img" id="qr-img" style="display:none;">
+    <input type="text" class="barcode-input" id="barcode" style="display:none;" placeholder="🔍 Сканируйте штрихкод" autocomplete="off"/>
+    <button class="main-btn" id="start-btn">НАЧАТЬ ПРИЁМ</button>
+    <div class="info" id="info" style="display:none;"></div>
+  </div>
+  <script>
+    // Автообновление времени и даты
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('time').innerText =
+        now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      const monthes = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+      document.getElementById('date').innerText =
+        `${now.getDate()} ${monthes[now.getMonth()]} ${now.getFullYear()}`;
+    }
+    setInterval(updateTime, 1000);
+    updateTime();
+  </script>
+</body>
+</html>
