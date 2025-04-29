@@ -1,34 +1,20 @@
-import threading
-from .worker import WebSocketWorker
+import asyncio
+from ws.worker import WebSocketWorker
+from PyQt5.QtCore import QObject
 
-class WebSocketManager:
-    _instance = None
+class WebSocketManager(QObject):
+    def __init__(self):
+        super().__init__()
+        self.worker = None
+        self.task = None
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.worker = None
-            cls._instance.thread = None
-        return cls._instance
-
-    def start_worker(self):
-        self.stop()
-
+    def start_worker(self, loop):
         self.worker = WebSocketWorker()
-        self.thread = threading.Thread(target=self.worker.start, daemon=True)
-        self.thread.start()
-
+        self.task = asyncio.run_coroutine_threadsafe(self.worker.start(), loop)
         return self.worker
 
-    def stop(self):
+    def stop_worker(self, loop):
         if self.worker:
-            try:
-                self.worker.stop()  # 🛑 теперь есть метод stop
-            except Exception as e:
-                print(f"❌ Ошибка при остановке WebSocketWorker: {e}")
+            asyncio.run_coroutine_threadsafe(self.worker.close(), loop)
             self.worker = None
-
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2)  # ⏳ дождёмся завершения
-        self.thread = None
-
+            self.task = None

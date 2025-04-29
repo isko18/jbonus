@@ -9,20 +9,25 @@ from utils.qr_generator import generate_qr
 from utils.image_loader import load_image_from_file
 from ws.manager import WebSocketManager
 from PyQt5.QtSvg import QSvgWidget
+from ws.arduino_manager import ArduinoManager
+import asyncio
+import time
 
 FANDOMAT_TOKEN = "fan_bc539aed70f65db5544c5f38ec1a076250150a7802f341d9fa94729a32bc9c5c"
 API_BASE_URL = "https://back.jashyl-bonus.kg/api/v1"
 
 class HomeScreen(QWidget):
     material_sent = pyqtSignal(str)
-    cap_accepted_signal = pyqtSignal()
+    # cap_accepted_signal = pyqtSignal()
+    # bottle_accepted_signal = pyqtSignal()
 
-    def __init__(self):
-        super().__init__()
+
+    def __init__(self, loop, parent=None):
+        super().__init__(parent)
         self.setWindowTitle("Фандомат")
         self.setMinimumSize(380, 500)
         self.resize(600, 900)
-        self.setWindowIcon(QIcon(r"C:\Users\Islam\Desktop\descktopJbonus\assets\banners\icons\image.png"))
+        self.setWindowIcon(QIcon("assets/icons/image.png"))
 
         QFontDatabase.addApplicationFont("assets/fonts/Nunito-Italic-VariableFont_wght.ttf")
         QFontDatabase.addApplicationFont("assets/fonts/Nunito-VariableFont_wght.ttf")
@@ -38,11 +43,12 @@ class HomeScreen(QWidget):
         self.loading_overlay = None
         self.qr_shown = False
         self.session_active = False
+        self.scanned_code = ""
 
         self.layout = QVBoxLayout(self)
         self.layout.setContentsMargins(20, 20, 20, 20)
         self.layout.setSpacing(20)
-
+        self.loop = loop 
         self.setup_ui()
         self.connect_signals()
 
@@ -53,6 +59,7 @@ class HomeScreen(QWidget):
         self._clock_timer.timeout.connect(self.update_time)
         self._clock_timer.start(1000)
         self.update_time()
+
 
     def setup_ui(self):
         self.setStyleSheet("""
@@ -66,7 +73,7 @@ class HomeScreen(QWidget):
                 font-family: 'Nunito', 'Segoe UI', 'Roboto', sans-serif;
             }
             QPushButton {
-                background-color: #A3D80D;
+                background-color: #3D9A32;
                 color: #fff;
                 font-size: 18px;
                 font-weight: bold;
@@ -95,59 +102,93 @@ class HomeScreen(QWidget):
                 background: #FFFFFF;
             }
         """)
+        self.current_barcode = None
+        self.waiting_for_bottle = False
 
-        header = QHBoxLayout()
-        header.setContentsMargins(5, 5, 5, 0)
-        header.setSpacing(20)
+        self.arduino_manager = ArduinoManager(ports_to_use=["COM11", "COM9"])
+        self.arduino_manager.cap_accepted.connect(self.on_cap_received)
+        self.arduino_manager.bottle_accepted.connect(self.on_bottle_received)
+        self.arduino_manager.aluminum_accepted.connect(self.on_aluminum_received)
+        self.arduino_manager.aluminum_verified.connect(lambda: asyncio.run_coroutine_threadsafe(self.on_aluminum_verified(), self.loop))
 
-        logo = QLabel()
-        logo_path = os.path.join("assets", "banners", "icons", "image.png")
-        pix = QPixmap(logo_path)
-        if pix.isNull():
-            pix = QPixmap(80, 80)
-            pix.fill(QColor("#A3D80D"))
-        else:
-            pix = pix.scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        logo.setPixmap(pix)
-        logo.setFixedSize(80, 80)
-        header.addWidget(logo, alignment=Qt.AlignVCenter | Qt.AlignLeft)
 
+
+
+        self.arduino_manager.start()
+        
+
+        # ------------------- HEADER -------------------
+        header_widget = QWidget()
+        header_widget.setFixedHeight(160)
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(30, 30, 30, 30)
+        header_layout.setSpacing(20)
+
+        # Logo
+
+
+        # SVG Logo
+        logo = QSvgWidget(os.path.join("assets", "icons", "Group 7 (1).svg"))  # путь к svg-файлу
+        logo.setFixedSize(120, 120)
+        header_layout.addWidget(logo, alignment=Qt.AlignVCenter | Qt.AlignLeft)
+
+
+        # Clock
         center = QWidget()
         center_layout = QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
         center_layout.setSpacing(0)
         self.time_label = QLabel("--:--")
-        self.time_label.setFont(QFont("Nunito", 28, QFont.Bold))
+        self.time_label.setFont(QFont("Nunito", 36, QFont.Bold))
         self.time_label.setAlignment(Qt.AlignCenter)
         self.date_label = QLabel("-- -- ----")
-        self.date_label.setFont(QFont("Nunito", 11))
+        self.date_label.setFont(QFont("Nunito", 18))
         self.date_label.setAlignment(Qt.AlignCenter)
         self.date_label.setStyleSheet("color:#BDBDBD;")
         center_layout.addWidget(self.time_label)
         center_layout.addWidget(self.date_label)
-        header.addWidget(center, stretch=1, alignment=Qt.AlignVCenter | Qt.AlignHCenter)
+        header_layout.addWidget(center, stretch=1, alignment=Qt.AlignVCenter | Qt.AlignHCenter)
 
+        # Support
         support = QWidget()
         support_layout = QVBoxLayout(support)
         support_layout.setContentsMargins(0, 0, 0, 0)
         support_layout.setSpacing(0)
         support_label = QLabel("Поддержка:")
-        support_label.setFont(QFont("Nunito", 11))
+        support_label.setFont(QFont("Nunito", 20))
         support_label.setAlignment(Qt.AlignRight)
         phone_label = QLabel("0 (700) 000 000")
-        phone_label.setFont(QFont("Nunito", 13, QFont.Bold))
-        phone_label.setStyleSheet("color:#A3D80D;")
+        phone_label.setFont(QFont("Nunito", 20, QFont.Bold))
+        phone_label.setStyleSheet("color:#3D9A32;")
         phone_label.setAlignment(Qt.AlignRight)
         support_layout.addWidget(support_label)
         support_layout.addWidget(phone_label)
-        header.addWidget(support, alignment=Qt.AlignVCenter | Qt.AlignRight)
+        header_layout.addWidget(support, alignment=Qt.AlignVCenter | Qt.AlignRight)
 
-        self.layout.addLayout(header)
+        self.layout.addWidget(header_widget)
         self.layout.addSpacing(8)
 
+        line = QLabel()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background: #E0E0E0; margin-bottom: 0px;")
+        self.layout.addWidget(line)
+
+        # ------------------- BANNER / QR -------------------
+# Контейнер для баннера
+        banner_container = QWidget()
+        banner_layout = QVBoxLayout(banner_container)
+        banner_layout.setContentsMargins(0, 0, 0, 0)
+        banner_layout.setSpacing(0)
+        banner_layout.setAlignment(Qt.AlignCenter)  # Центрируем всё внутри!
+
         self.ad_label = QLabel(alignment=Qt.AlignCenter)
-        self.ad_label.setMinimumHeight(650)
-        self.layout.addWidget(self.ad_label)
+        self.ad_label.setMinimumSize(900, 900)  # Можно регулировать минимальный размер баннера
+        self.ad_label.setScaledContents(True)   # Растягивание в пределах контейнера при необходимости
+
+        banner_layout.addWidget(self.ad_label)
+
+        self.layout.addWidget(banner_container, stretch=1)  # Растягиваем контейнер в общем лейауте
+
 
         self.status_indicator = QLabel("", alignment=Qt.AlignCenter)
         self.status_indicator.setVisible(False)
@@ -169,52 +210,109 @@ class HomeScreen(QWidget):
         self.qr_hint_label.hide()
         self.layout.addWidget(self.qr_hint_label)
 
-        self.barcode_input = QLineEdit()
-        self.barcode_input.setPlaceholderText("🔍 Сканируйте штрихкод")
-        self.barcode_input.setClearButtonEnabled(True)
-        self.barcode_input.returnPressed.connect(self.submit_material)
-        self.barcode_input.hide()
-        self.layout.addWidget(self.barcode_input)
-
-        self.confirm_btn = QPushButton("✅ Подтвердить")
-        self.confirm_btn.setIcon(QIcon("assets/icons/check.png"))
-        self.confirm_btn.setIconSize(QSize(24, 24))
-        self.confirm_btn.clicked.connect(self.submit_material)
-        self.confirm_btn.setEnabled(False)
-        self.confirm_btn.hide()
-        self.layout.addWidget(self.confirm_btn)
 
         self.info_label = QLabel(alignment=Qt.AlignCenter)
         self.info_label.hide()
         self.layout.addWidget(self.info_label)
+
+        # ------------------- BUTTONS (Start / Back) -------------------
+        buttons_widget = QWidget()
+        buttons_layout = QVBoxLayout(buttons_widget)
+        buttons_layout.setContentsMargins(0, 0, 0, 40)  # Отступ снизу побольше
+        buttons_layout.setSpacing(10)
+        buttons_layout.setAlignment(Qt.AlignBottom)  # Прижимаем кнопки вниз в контейнере
 
         self.start_btn = QPushButton("Нажмите 'Начать', чтобы сдать вторсырьё")
         self.start_btn.setIcon(QIcon("assets/icons/start.png"))
         self.start_btn.setIconSize(QSize(24, 24))
         self.start_btn.setFont(QFont("Nunito", 15, QFont.Bold))
         self.start_btn.clicked.connect(self.start_session)
-        self.layout.addWidget(self.start_btn)
+        buttons_layout.addWidget(self.start_btn)
 
         self.back_btn = QPushButton("⬅ Назад")
         self.back_btn.setFont(QFont("Nunito", 14, QFont.Bold))
         self.back_btn.setStyleSheet(
-            "background-color: #eee; color: #444; border-radius: 12px; padding: 10px; margin-top: 10px;")
+            "background-color: #eee; color: #444; border-radius: 12px; padding: 10px; margin-top: 10px;"
+        )
         self.back_btn.clicked.connect(self.reset_to_home)
         self.back_btn.hide()
-        self.layout.addWidget(self.back_btn)
+        buttons_layout.addWidget(self.back_btn)
+
+        self.layout.addWidget(buttons_widget)
+
 
     def connect_signals(self):
         self.material_sent.connect(self.on_material_sent)
-        self.cap_accepted_signal.connect(self.on_cap_received)
+        # self.cap_accepted_signal.connect(self.on_cap_received)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            if self.scanned_code:
+                barcode = self.scanned_code.strip()
+                self.scanned_code = ""
+                if self.waiting_for_bottle:
+                    self.process_bottle_scan(barcode)
+                elif getattr(self, 'waiting_for_aluminum', False):
+                    self.process_aluminum_scan(barcode)
+                else:
+                    asyncio.run_coroutine_threadsafe(self.process_scanned_barcode(barcode), self.loop)
+        else:
+            text = event.text()
+            if text.isdigit():
+                self.scanned_code += text
+
+                
+    async def process_scanned_barcode(self, barcode):
+        if not barcode:
+            return
+        try:
+            # Блокирующий requests нужно будет потом тоже заменить на aiohttp!
+            r = await asyncio.to_thread(requests.get, f"{API_BASE_URL}/recyclable-materials/by/barcode/{barcode}/", timeout=5)
+            r.raise_for_status()
+            data = r.json()
+            mtype = data.get("type", "")
+
+            self.current_barcode = barcode
+
+            if mtype == "plastic":
+                self.show_info_animation("Положите крышку")
+                self.arduino_manager.send_to_all("on_cap")
+            elif mtype == "iron":
+                self.show_info_animation("Положите алюминиевую банку")
+                self.arduino_manager.send_to_all("open_ca")
+                self.waiting_for_aluminum = True
+            else:
+                await self.accept_material_directly(barcode)  # ⚡ await
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", str(e))
+            
+    def process_aluminum_scan(self, barcode):
+        if barcode == self.current_barcode:
+            self.show_info_animation("✅ Проверка алюминия...")
+            time.sleep(2)
+            self.arduino_manager.send_to_all("PUSH")
+            self.waiting_for_aluminum = False
+            # теперь ждём от Arduino BOT_OK3, а не завершаем сразу
+        else:
+            self.show_info_animation("⚠️ Алюминий не совпал")
+            self.arduino_manager.send_to_all("push_back")
+
+
+    async def accept_material_directly(self, barcode):
+        self.show_info_animation("✅ Материал принят!")
+        if self.ws_worker:
+            await self.ws_worker.send_material(barcode)  # ⚡ await
+        self.material_sent.emit(barcode)
+        QTimer.singleShot(2000, self.reset_to_home)
+
+
 
     def update_time(self):
         from datetime import datetime
         now = datetime.now()
         self.time_label.setText(now.strftime("%H:%M"))
-        months = [
-            "января", "февраля", "марта", "апреля", "мая", "июня",
-            "июля", "августа", "сентября", "октября", "ноября", "декабря"
-        ]
+        months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
+                  "августа", "сентября", "октября", "ноября", "декабря"]
         self.date_label.setText(f"{now.day} {months[now.month-1]} {now.year}")
 
     def load_banners(self):
@@ -233,25 +331,14 @@ class HomeScreen(QWidget):
         if pixmap:
             self.loaded_pixmap = pixmap
             self.ad_label.setPixmap(
-                pixmap.scaled(
-                    self.ad_label.size(),
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation
-                )
+                pixmap.scaled(self.ad_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             )
-            anim = QPropertyAnimation(self.ad_label, b"windowOpacity")
-            anim.setDuration(500)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(QEasingCurve.InOutQuad)
-            anim.start()
-            self.anim = anim
 
     def next_banner(self):
         if self.banner_urls:
             self.current_banner_index = (self.current_banner_index + 1) % len(self.banner_urls)
             self.show_banner(self.banner_urls[self.current_banner_index])
-
+            
     def show_loading_overlay(self):
         if self.loading_overlay:
             return
@@ -262,7 +349,7 @@ class HomeScreen(QWidget):
         self.loading_overlay.show()
         layout = QVBoxLayout(self.loading_overlay)
         layout.setAlignment(Qt.AlignCenter)
-        svg_path = os.path.join("assets", "banners", "icons", "5.svg")
+        svg_path = os.path.join("assets", "icons", "5.svg")
         svg_widget = QSvgWidget(svg_path)
         svg_widget.setFixedSize(120, 120)
         layout.addWidget(svg_widget)
@@ -278,7 +365,7 @@ class HomeScreen(QWidget):
         self.status_indicator.setVisible(True)
 
     def hide_status(self):
-        self.status_gif.stop()
+        # self.status_gif.stop()
         self.status_indicator.setVisible(False)
 
     def on_connection_state_changed(self, is_connected):
@@ -312,13 +399,6 @@ class HomeScreen(QWidget):
         self.qr_label.setPixmap(qr_pixmap)
         self.qr_label.show()
 
-        # shadow = QGraphicsDropShadowEffect()
-        # shadow.setBlurRadius(40)
-        # shadow.setXOffset(0)
-        # shadow.setYOffset(8)
-        # shadow.setColor(QColor(80, 80, 80, 180))
-        # self.qr_label.setGraphicsEffect(shadow)
-
         self.qr_hint_label.show()
         self.ad_label.hide()
         self.start_btn.hide()
@@ -343,36 +423,45 @@ class HomeScreen(QWidget):
         self.status_gif.start()
         self.status_indicator.setVisible(True)
         if self.ws_worker:
-            WebSocketManager().stop()
+            # WebSocketManager().stop()
             self.ws_worker = None
             QTimer.singleShot(2000, self._start_ws)
         else:
             self._start_ws()
 
     def _start_ws(self):
-        self.ws_worker = WebSocketManager().start_worker()
+        self.ws_worker = WebSocketManager().start_worker(self.loop)
         self.ws_worker.connected.connect(self.on_ws_connected)
-        self.ws_worker.cap_accepted_signal.connect(self.cap_accepted_signal)
+        # self.ws_worker.cap_accepted_signal.connect(self.cap_accepted_signal)
         self.ws_worker.session_ended.connect(self.on_session_ended)
         self.ws_worker.error.connect(lambda msg: self.show_status(f"❌ WebSocket ошибка: {msg}"))
         self.ws_worker.connected_state_changed.connect(self.on_connection_state_changed)
         self.ws_worker.socket_opened.connect(self.on_socket_opened)
         self.show_loading_overlay()
-
+        
     def on_ws_connected(self, user):
         self.hide_status()
-        self.ad_label.hide()
         self.qr_label.hide()
         self.qr_hint_label.hide()
         self.start_btn.hide()
         self.back_btn.show()
-        full_name = user.get("get_full_name") or f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
-        quantity = user.get("quantity_of_raw_materials", 0.0)
-        self.barcode_input.show()
-        self.confirm_btn.show()
-        self.confirm_btn.setEnabled(True)
         self.info_label.hide()
-        self.barcode_input.setFocus()
+
+        path = "assets/icons/22.png"
+
+        if not os.path.exists(path):
+            print(f"Ошибка: изображение {path} не найдено!")
+            self.ad_label.setText("Изображение не найдено!")
+            return
+
+        pixmap = QPixmap(path).scaled(
+            320, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        self.ad_label.setPixmap(pixmap)
+        self.ad_label.show()
+        self.ad_label.repaint()
+
+        print("✅ Картинка успешно загружена и отображена")
 
     def on_session_ended(self):
         self.show_loading_overlay()
@@ -384,71 +473,103 @@ class HomeScreen(QWidget):
 
     def reset_to_home(self):
         print("== RESET TO HOME ==")
-        self.qr_shown = False 
+        self.qr_shown = False
         self.start_btn.setText("Нажмите 'Начать', чтобы сдать вторсырьё")
         self.qr_label.clear()
         self.qr_label.hide()
         self.qr_label.setGraphicsEffect(None)
         self.qr_hint_label.hide()
-        self.barcode_input.hide()
-        self.confirm_btn.hide()
         self.info_label.hide()
-        self.barcode_input.clear()
+        self.ad_label.clear()  # <-- Очистить ad_label
+        self.loaded_pixmap = None  # <-- Очистить ссылку на старый баннер
         self.ad_label.show()
         self.hide_status()
         self.cap_required = False
         self.cap_received = False
-        self.confirm_btn.setEnabled(False)
         self.session_active = False
         self.start_btn.show()
         self.back_btn.hide()
-        WebSocketManager().stop()
+        # WebSocketManager().stop()
         self.ws_worker = None
+        # self.arduino_manager.stop()
+
+    async def on_aluminum_verified(self):
+        self.show_info_animation("✅ Алюминий принят!")
+        if self.ws_worker and self.current_barcode:
+            await self.ws_worker.send_material(self.current_barcode)  # ⚡ await
+        self.finish_session()
+
 
     def on_cap_received(self):
-        self.cap_received = True
-        QMessageBox.information(self, "Крышка", "Крышка принята. Теперь сдайте бутылку.")
+        self.show_info_animation("Крышка принята ✅")
+        self.arduino_manager.send_to_all("open_bottle")
+        self.waiting_for_bottle = True
 
-    def submit_material(self):
-        barcode = self.barcode_input.text().strip()
-        if not barcode.isdigit():
-            self.barcode_input.setStyleSheet("border: 2px solid red;")
-            QTimer.singleShot(1500, lambda: self.barcode_input.setStyleSheet(""))
-            QMessageBox.warning(self, "Неверный ввод", "Введите корректный штрихкод")
-            return
-        try:
-            r = requests.get(f"{API_BASE_URL}/recyclable-materials/by/barcode/{barcode}/", timeout=5)
-            r.raise_for_status()
-            data = r.json()
-            name = data.get("name", "Неизвестно")
-            mtype = data.get("type", "")
-            weight = data.get("weight", 0)
-            self.info_label.setText(f"Материал: {name}\nТип: {mtype}\nВес: {weight} г")
-            self.info_label.setStyleSheet("color: white;")
-            self.info_label.show()
-            if mtype == "plastic" and not self.cap_received:
-                self.cap_required = True
-                self.barcode_input.clear()
-                return
-            self.ws_worker.send_material(barcode)
-            self.material_sent.emit(name)
-        except requests.RequestException as ex:
-            QMessageBox.critical(self, "Ошибка сети", f"Нет соединения с сервером!\n\n{ex}")
-        except Exception as e:
-            QMessageBox.critical(self, "Ошибка", str(e))
+    def process_bottle_scan(self, barcode):
+        if barcode == self.current_barcode:
+            time.sleep(2)
+            self.show_info_animation("✅ Бутылка совпала")
+            self.arduino_manager.send_to_all("go_bottle")
+        else:
+            self.show_info_animation("⚠️ Бутылка не совпала")
+            self.arduino_manager.send_to_all("push_back")
+
+    def on_bottle_received(self):
+        self.show_info_animation("Бутылка принята ✅")
+        self.finish_session()
+        
+    def on_aluminum_received(self):
+        self.show_info_animation("Алюминий принят ✅")
+        self.finish_session()
+
+
+    def show_info_animation(self, text):
+        self.info_label.setText(text)
+        self.info_label.setStyleSheet("color: #00E676; font-weight: bold; font-size: 24px;")
+        self.info_label.show()
+        
+    def finish_session(self):
+        self.waiting_for_bottle = False
+        self.current_barcode = None
+        QTimer.singleShot(2000, self.reset_to_home)
+        
+    # def submit_material(self):
+    #     barcode = self.barcode_input.text().strip()
+    #     if not barcode.isdigit():
+    #         self.barcode_input.setStyleSheet("border: 2px solid red;")
+    #         QTimer.singleShot(1500, lambda: self.barcode_input.setStyleSheet(""))
+    #         QMessageBox.warning(self, "Неверный ввод", "Введите корректный штрихкод")
+    #         return
+    #     try:
+    #         r = requests.get(f"{API_BASE_URL}/recyclable-materials/by/barcode/{barcode}/", timeout=5)
+    #         r.raise_for_status()
+    #         data = r.json()
+    #         name = data.get("name", "Неизвестно")
+    #         mtype = data.get("type", "")
+    #         weight = data.get("weight", 0)
+    #         self.info_label.setText(f"Материал: {name}\nТип: {mtype}\nВес: {weight} г")
+    #         self.info_label.setStyleSheet("color: white;")
+    #         self.info_label.show()
+    #         if mtype == "plastic" and not self.cap_received:
+    #             self.cap_required = True
+    #             self.barcode_input.clear()
+    #             return
+    #         self.ws_worker.send_material(barcode)
+    #         self.material_sent.emit(name)
+    #     except requests.RequestException as ex:
+    #         QMessageBox.critical(self, "Ошибка сети", f"Нет соединения с сервером!\n\n{ex}")
+    #     except Exception as e:
+    #         QMessageBox.critical(self, "Ошибка", str(e))
 
     def on_material_sent(self, name):
-        self.info_label.setStyleSheet("color: #00E676; font-weight: bold")
-        self.info_label.setText(f"✅ {name} успешно отправлен!")
-        self.barcode_input.clear()
+            self.info_label.setStyleSheet("color: #00E676; font-weight: bold")
+            self.info_label.setText(f"✅ {name} успешно отправлен!")
 
     def resizeEvent(self, event):
         if self.loaded_pixmap:
             self.ad_label.setPixmap(
                 self.loaded_pixmap.scaled(
-                    self.ad_label.size(),
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation
+                    self.ad_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
                 )
             )
         return super().resizeEvent(event)
