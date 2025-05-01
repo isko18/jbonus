@@ -14,7 +14,6 @@ def open_safe_port(port, baud=9600):
         print(f"❌ Не удалось открыть порт {port}: {e}")
         return None
 
-# --- Открываем только два порта ---
 all_serials = []
 for p in port_list:
     ser = open_safe_port(p)
